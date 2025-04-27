@@ -191,7 +191,7 @@ class CryplexAi:
             return nodes_count, proxy_choice
 
     async def start_node(self, token: str, address: str, count: int, proxy=None, retries=5):
-        url = f"https://app.cryplex.ai/apiv2/node/Start"
+        url = f"{self.BASE_API}/node/Start"
         data = json.dumps({"__ssoToken":token})
         headers = {
             **self.headers,
