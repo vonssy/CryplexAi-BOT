@@ -230,7 +230,7 @@ class CryplexAi:
                     f"{Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
             
-    async def process_perform_node(self, token: str, address: str, count: int, use_proxy: bool):
+    async def process_start_node(self, token: str, address: str, count: int, use_proxy: bool):
         proxy = self.get_next_proxy_for_account(f"{address}_{count}") if use_proxy else None
         start = None
         while start is None:
@@ -238,23 +238,33 @@ class CryplexAi:
             if not start:
                 await asyncio.sleep(5)
                 continue
-            
+
+            model_chunks = start.get("res", {}).get("modelChunks", {})
+
             self.print_message(self.mask_account(address), proxy, Fore.WHITE, f"Node {count}"
                 f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
                 f"{Fore.GREEN + Style.BRIGHT}Started Successfully{Style.RESET_ALL}"
             )
-
-            model_chunks = start.get("res", {}).get("modelChunks", {})
             
-            while True:
-                sync = await self.sync_node(token, address, model_chunks, count, proxy)
-                if sync and sync.get("isSucc"):
-                    self.print_message(self.mask_account(address), proxy, Fore.WHITE, f"Node {count}"
-                        f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
-                        f"{Fore.GREEN + Style.BRIGHT}Sync File Successfully{Style.RESET_ALL}"
-                    )
+            return model_chunks
+            
+    async def process_sync_node(self, token: str, address: str, model_chunks: dict, count: int, use_proxy: bool):
+        while True:
+            proxy = self.get_next_proxy_for_account(f"{address}_{count}") if use_proxy else None
+            
+            sync = await self.sync_node(token, address, model_chunks, count, proxy)
+            if sync and sync.get("isSucc"):
+                self.print_message(self.mask_account(address), proxy, Fore.WHITE, f"Node {count}"
+                    f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
+                    f"{Fore.GREEN + Style.BRIGHT}Sync File Successfully{Style.RESET_ALL}"
+                )
 
-                await asyncio.sleep(30)
+            await asyncio.sleep(30)
+            
+    async def process_perform_node(self, token: str, address: str, count: int, use_proxy: bool):
+        model_chunks = await self.process_start_node(token, address, count, use_proxy)
+        if model_chunks:
+            await self.process_sync_node(token, address, model_chunks, count, use_proxy)
 
     async def process_accounts(self, token: str, address: str, nodes_count: int, use_proxy: bool):
         tasks = []
