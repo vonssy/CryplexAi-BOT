@@ -1,9 +1,4 @@
-from aiohttp import (
-    ClientResponseError,
-    ClientSession,
-    ClientTimeout
-)
-from aiohttp_socks import ProxyConnector
+from curl_cffi import requests
 from fake_useragent import FakeUserAgent
 from datetime import datetime
 from colorama import *
@@ -56,13 +51,12 @@ class CryplexAi:
         filename = "proxy.txt"
         try:
             if use_proxy_choice == 1:
-                async with ClientSession(timeout=ClientTimeout(total=30)) as session:
-                    async with session.get("https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt") as response:
-                        response.raise_for_status()
-                        content = await response.text()
-                        with open(filename, 'w') as f:
-                            f.write(content)
-                        self.proxies = content.splitlines()
+                response = await asyncio.to_thread(requests.post, "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt")
+                response.raise_for_status()
+                content = response.text
+                with open(filename, 'w') as f:
+                    f.write(content)
+                self.proxies = content.splitlines()
             else:
                 if not os.path.exists(filename):
                     self.log(f"{Fore.RED + Style.BRIGHT}File {filename} Not Found.{Style.RESET_ALL}")
@@ -199,13 +193,11 @@ class CryplexAi:
             "Content-Type": "application/json"
         }
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data) as response:
-                        response.raise_for_status()
-                        return await response.json()
-            except (Exception, ClientResponseError) as e:
+                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110")
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
@@ -214,7 +206,7 @@ class CryplexAi:
                     f"{Fore.RED + Style.BRIGHT} Start Failed: {Style.RESET_ALL}"
                     f"{Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
-
+    
     async def sync_node(self, token: str, address: str, model_chunks: dict, count: int, proxy=None, retries=5):
         url = f"{self.BASE_API}/node/SyncFile"
         data = json.dumps(self.generate_payload(token, model_chunks))
@@ -224,13 +216,11 @@ class CryplexAi:
             "Content-Type": "application/json"
         }
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
             try:
-                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data) as response:
-                        response.raise_for_status()
-                        return await response.json()
-            except (Exception, ClientResponseError) as e:
+                response = await asyncio.to_thread(requests.post, url=url, headers=headers, data=data, proxy=proxy, timeout=60, impersonate="chrome110")
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
