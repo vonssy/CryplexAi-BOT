@@ -82,7 +82,7 @@ class CryplexAi:
         schemes = ["http://", "https://", "socks4://", "socks5://"]
         if any(proxies.startswith(scheme) for scheme in schemes):
             return proxies
-        return f"socks5://{proxies}"
+        return f"http://{proxies}"
 
     def get_next_proxy_for_account(self, account):
         if account not in self.account_proxies:
