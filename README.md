@@ -2,14 +2,15 @@
 Cryplex AI BOT
 
 - Register Here : [Cryplex AI](https://app.cryplex.ai/dashboard?ref=ykatj)
-- Use Code      : `ykatj`
+- Use Code `ykatj`
 
 ## Features
 
   - Auto Get Account Information
-  - Auto Run With [Monosans](https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt) Proxy - Choose 1
-  - Auto Run With Private Proxy - Choose 2
-  - Auto Run Without Proxy - Choose 3
+  - Auto Run With [Monosans](https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt) Proxy - `Choose 1`
+  - Auto Run With Private Proxy - `Choose 2`
+  - Auto Run Without Proxy - `Choose 3`
+  - Auto Rotate Invalid Proxies - `y` or `n`
   - Auto Start & Sync Files Node
   - Multi Accounts With Threads
 

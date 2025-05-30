@@ -2,7 +2,7 @@ from curl_cffi import requests
 from fake_useragent import FakeUserAgent
 from datetime import datetime
 from colorama import *
-import asyncio, random, base64, json, os, pytz
+import asyncio, random, base64, time, json, os, pytz
 
 wib = pytz.timezone('Asia/Jakarta')
 
@@ -21,6 +21,7 @@ class CryplexAi:
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
+        self.sso_tokens = {}
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -51,7 +52,7 @@ class CryplexAi:
         filename = "proxy.txt"
         try:
             if use_proxy_choice == 1:
-                response = await asyncio.to_thread(requests.post, "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt")
+                response = await asyncio.to_thread(requests.get, "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt")
                 response.raise_for_status()
                 content = response.text
                 with open(filename, 'w') as f:
@@ -81,7 +82,7 @@ class CryplexAi:
         schemes = ["http://", "https://", "socks4://", "socks5://"]
         if any(proxies.startswith(scheme) for scheme in schemes):
             return proxies
-        return f"http://{proxies}"
+        return f"socks5://{proxies}"
 
     def get_next_proxy_for_account(self, account):
         if account not in self.account_proxies:
@@ -106,12 +107,30 @@ class CryplexAi:
             decoded_payload = base64.urlsafe_b64decode(payload + "==").decode("utf-8")
             parsed_payload = json.loads(decoded_payload)
             address = parsed_payload["address"]
+            exp_time = parsed_payload["exp"]
             
-            return address
+            return address, exp_time
         except Exception as e:
-            return None
+            return None, None
         
-    def generate_payload(self, token: str, model_chunks: dict):
+    def check_token_status(self, address: str, exp_time: str):
+        try:
+            if int(time.time()) > exp_time:
+                self.log(
+                    f"{Fore.CYAN + Style.BRIGHT}[ Account:{Style.RESET_ALL}"
+                    f"{Fore.WHITE + Style.BRIGHT} {self.mask_account(address)} {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.CYAN + Style.BRIGHT} Status: {Style.RESET_ALL}"
+                    f"{Fore.YELLOW + Style.BRIGHT}Token Expired{Style.RESET_ALL}"
+                    f"{Fore.CYAN + Style.BRIGHT} ]{Style.RESET_ALL}"
+                )
+                return False
+
+            return True
+        except Exception as e:
+            return False
+        
+    def generate_payload(self, address: str, model_chunks: dict):
         try:
             entries = list(model_chunks.items())
             id, base64data = random.choice(entries)
@@ -126,7 +145,7 @@ class CryplexAi:
                 "id":id,
                 "start":start,
                 "end":end,
-                "__ssoToken":token
+                "__ssoToken":self.sso_tokens[address]
             }
 
             return payload
@@ -140,7 +159,7 @@ class CryplexAi:
     def print_message(self, account, proxy, color, message):
         self.log(
             f"{Fore.CYAN + Style.BRIGHT}[ Account:{Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BRIGHT} {account} {Style.RESET_ALL}"
+            f"{Fore.WHITE + Style.BRIGHT} {self.mask_account(account)} {Style.RESET_ALL}"
             f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
             f"{Fore.CYAN + Style.BRIGHT} Proxy: {Style.RESET_ALL}"
             f"{Fore.WHITE + Style.BRIGHT}{proxy}{Style.RESET_ALL}"
@@ -151,42 +170,53 @@ class CryplexAi:
         )
 
     def print_question(self):
+        count = 1
+        rotate = False
+
         while True:
             try:
-                print("1. Run With Monosans Proxy")
-                print("2. Run With Private Proxy")
-                print("3. Run Without Proxy")
-                proxy_choice = int(input("Choose [1/2/3] -> ").strip())
+                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Monosans Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}2. Run With Private Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}3. Run Without Proxy{Style.RESET_ALL}")
+                choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3] -> {Style.RESET_ALL}").strip())
 
-                if proxy_choice in [1, 2, 3]:
+                if choose in [1, 2, 3]:
                     proxy_type = (
-                        "Run With Monosans Proxy" if proxy_choice == 1 else 
-                        "Run With Private Proxy" if proxy_choice == 2 else 
+                        "Run With Monosans Proxy" if choose == 1 else 
+                        "Run With Private Proxy" if choose == 2 else 
                         "Run Without Proxy"
                     )
                     print(f"{Fore.GREEN + Style.BRIGHT}{proxy_type} Selected.{Style.RESET_ALL}")
+                    break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Please enter either 1, 2 or 3.{Style.RESET_ALL}")
             except ValueError:
                 print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1, 2 or 3).{Style.RESET_ALL}")
 
-            nodes_count = 0
-            if proxy_choice in [1, 2]:
-                while True:
-                    try:
-                        nodes_count = int(input("How Many Nodes Do You Want to Run For Each Account? -> ").strip())
-                        if nodes_count > 0:
-                            break
-                        else:
-                            print(f"{Fore.RED+Style.BRIGHT}Please enter a positive number.{Style.RESET_ALL}")
-                    except ValueError:
-                        print(f"{Fore.RED+Style.BRIGHT}Invalid input. Enter a number.{Style.RESET_ALL}")
+        if choose in [1, 2]:
+            while True:
+                try:
+                    count = int(input(f"{Fore.YELLOW + Style.BRIGHT}How Many Nodes Do You Want to Run For Each Account? -> {Style.RESET_ALL}").strip())
+                    if count > 0:
+                        break
+                    else:
+                        print(f"{Fore.RED+Style.BRIGHT}Please enter a positive number.{Style.RESET_ALL}")
+                except ValueError:
+                    print(f"{Fore.RED+Style.BRIGHT}Invalid input. Enter a number.{Style.RESET_ALL}")
 
-            return nodes_count, proxy_choice
+            while True:
+                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
+                if rotate in ["y", "n"]:
+                    rotate = rotate == "y"
+                    break
+                else:
+                    print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
 
-    async def start_node(self, token: str, address: str, count: int, proxy=None, retries=5):
+        return choose, count, rotate
+
+    async def start_node(self, address: str, idx: int, proxy=None, retries=5):
         url = f"{self.BASE_API}/node/Start"
-        data = json.dumps({"__ssoToken":token})
+        data = json.dumps({"__ssoToken":self.sso_tokens[address]})
         headers = {
             **self.headers,
             "Content-Length": str(len(data)),
@@ -201,15 +231,15 @@ class CryplexAi:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.print_message(self.mask_account(address), proxy, Fore.WHITE, f"Node {count} "
+                return self.print_message(address, proxy, Fore.WHITE, f"Node {idx} "
                     f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.RED + Style.BRIGHT} Start Failed: {Style.RESET_ALL}"
                     f"{Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
     
-    async def sync_node(self, token: str, address: str, model_chunks: dict, count: int, proxy=None, retries=5):
+    async def sync_node(self, address: str, model_chunks: dict, idx: int, proxy=None, retries=5):
         url = f"{self.BASE_API}/node/SyncFile"
-        data = json.dumps(self.generate_payload(token, model_chunks))
+        data = json.dumps(self.generate_payload(address, model_chunks))
         headers = {
             **self.headers,
             "Content-Length": str(len(data)),
@@ -224,66 +254,77 @@ class CryplexAi:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.print_message(self.mask_account(address), proxy, Fore.WHITE, f"Node {count} "
+                return self.print_message(address, proxy, Fore.WHITE, f"Node {idx} "
                     f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.RED + Style.BRIGHT} Sync File Failed: {Style.RESET_ALL}"
                     f"{Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}"
                 )
             
-    async def process_start_node(self, token: str, address: str, count: int, use_proxy: bool):
-        proxy = self.get_next_proxy_for_account(f"{address}_{count}") if use_proxy else None
-        start = None
-        while start is None:
-            start = await self.start_node(token, address, count, proxy)
-            if not start:
+    async def process_start_node(self, address: str, idx: str, use_proxy: bool, rotate_proxy: bool):
+        proxy = self.get_next_proxy_for_account(f"{address}_{idx}") if use_proxy else None
+
+        if rotate_proxy:
+            while True:
+                started = await self.start_node(address, idx, proxy)
+                if not started:
+                    proxy = self.get_next_proxy_for_account(f"{address}_{idx}")
+                    await asyncio.sleep(5)
+                    continue
+
+                model_chunks = started.get("res", {}).get("modelChunks", {})
+
+                self.print_message(address, proxy, Fore.WHITE, f"Node {idx}"
+                    f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
+                    f"{Fore.GREEN + Style.BRIGHT}Started Successfully{Style.RESET_ALL}"
+                )
+                return model_chunks
+
+        while True:
+            started = await self.start_node(address, idx, proxy)
+            if not started:
                 await asyncio.sleep(5)
                 continue
 
-            model_chunks = start.get("res", {}).get("modelChunks", {})
+            model_chunks = started.get("res", {}).get("modelChunks", {})
 
-            self.print_message(self.mask_account(address), proxy, Fore.WHITE, f"Node {count}"
+            self.print_message(address, proxy, Fore.WHITE, f"Node {idx}"
                 f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
                 f"{Fore.GREEN + Style.BRIGHT}Started Successfully{Style.RESET_ALL}"
             )
-            
             return model_chunks
             
-    async def process_sync_node(self, token: str, address: str, model_chunks: dict, count: int, use_proxy: bool):
-        while True:
-            proxy = self.get_next_proxy_for_account(f"{address}_{count}") if use_proxy else None
-            
-            sync = await self.sync_node(token, address, model_chunks, count, proxy)
-            if sync and sync.get("isSucc"):
-                self.print_message(self.mask_account(address), proxy, Fore.WHITE, f"Node {count}"
-                    f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
-                    f"{Fore.GREEN + Style.BRIGHT}Sync File Successfully{Style.RESET_ALL}"
-                )
-
-            await asyncio.sleep(30)
-            
-    async def process_perform_node(self, token: str, address: str, count: int, use_proxy: bool):
-        model_chunks = await self.process_start_node(token, address, count, use_proxy)
+    async def process_sync_node(self, address: str, idx: int, use_proxy: bool, rotate_proxy: bool):
+        model_chunks = await self.process_start_node(address, idx, use_proxy, rotate_proxy)
         if model_chunks:
-            await self.process_sync_node(token, address, model_chunks, count, use_proxy)
+            while True:
+                proxy = self.get_next_proxy_for_account(f"{address}_{idx}") if use_proxy else None
+                
+                sync = await self.sync_node(address, model_chunks, idx, proxy)
+                if sync and sync.get("isSucc"):
+                    self.print_message(address, proxy, Fore.WHITE, f"Node {idx}"
+                        f"{Fore.MAGENTA + Style.BRIGHT} - {Style.RESET_ALL}"
+                        f"{Fore.GREEN + Style.BRIGHT}Sync File Successfully{Style.RESET_ALL}"
+                    )
 
-    async def process_accounts(self, token: str, address: str, nodes_count: int, use_proxy: bool):
+                await asyncio.sleep(30)
+
+    async def process_accounts(self, address: str, use_proxy: bool, nodes_count: int, rotate_proxy: bool):
         tasks = []
+
         if use_proxy:
             for i in range(nodes_count):
-                count = i + 1
-                tasks.append(asyncio.create_task(self.process_perform_node(token, address, count, use_proxy)))
+                tasks.append(asyncio.create_task(self.process_sync_node(address, i + 1, use_proxy, rotate_proxy)))
         else:
-            count = 1
-            tasks.append(asyncio.create_task(self.process_perform_node(token, address, count, use_proxy)))
+            tasks.append(asyncio.create_task(self.process_sync_node(address, 1, use_proxy, rotate_proxy)))
 
         await asyncio.gather(*tasks)
         
     async def main(self):
         try:
             with open('tokens.txt', 'r') as file:
-                tokens = [line.strip() for line in file if line.strip()]
+                sso_tokens = [line.strip() for line in file if line.strip()]
 
-            nodes_count, use_proxy_choice = self.print_question()
+            use_proxy_choice, nodes_count, rotate_proxy = self.print_question()
 
             use_proxy = False
             if use_proxy_choice in [1, 2]:
@@ -293,31 +334,38 @@ class CryplexAi:
             self.welcome()
             self.log(
                 f"{Fore.GREEN + Style.BRIGHT}Account's Total: {Style.RESET_ALL}"
-                f"{Fore.WHITE + Style.BRIGHT}{len(tokens)}{Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT}{len(sso_tokens)}{Style.RESET_ALL}"
             )
 
             if use_proxy:
                 await self.load_proxies(use_proxy_choice)
 
-            self.log(f"{Fore.CYAN + Style.BRIGHT}-{Style.RESET_ALL}"*75)
+            self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*75)
 
-            while True:
-                tasks = []
-                for token in tokens:
-                    if token:
-                        address = self.decode_token(token)
+            tasks = []
+            for sso_token in sso_tokens:
+                if sso_token:
+                    address, exp_time = self.decode_token(sso_token)
 
-                        if address:
-                            tasks.append(asyncio.create_task(self.process_accounts(token, address, nodes_count, use_proxy)))
+                    if not address or not exp_time:
+                        continue
 
-                await asyncio.gather(*tasks)
-                await asyncio.sleep(10)
+                    is_token_active = self.check_token_status(address, exp_time)
+                    if not is_token_active:
+                        continue
+
+                    self.sso_tokens[address] = sso_token
+
+                    tasks.append(asyncio.create_task(self.process_accounts(address, use_proxy, nodes_count, rotate_proxy)))
+
+            await asyncio.gather(*tasks)
 
         except FileNotFoundError:
             self.log(f"{Fore.RED}File 'tokens.txt' Not Found.{Style.RESET_ALL}")
             return
         except Exception as e:
             self.log(f"{Fore.RED+Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
+            raise e
 
 if __name__ == "__main__":
     try:
