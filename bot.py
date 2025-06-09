@@ -237,7 +237,9 @@ class CryplexAi:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.print_message(address, node_idx, proxy, Fore.RED, f"Failed to Start Node: {Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}")
+                self.print_message(address, node_idx, proxy, Fore.RED, f"Failed to Start Node: {Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}")
+
+        return None
     
     async def sync_node(self, address: str, model_chunks: dict, node_idx: int, proxy=None, retries=5):
         url = f"{self.BASE_API}/node/SyncFile"
@@ -256,7 +258,9 @@ class CryplexAi:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.print_message(address, node_idx, proxy, Fore.RED, f"Failed to Sync Node Files: {Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}")
+                self.print_message(address, node_idx, proxy, Fore.RED, f"Failed to Sync Node Files: {Fore.YELLOW + Style.BRIGHT}{str(e)}{Style.RESET_ALL}")
+
+        return None
             
     async def process_start_node(self, address: str, node_idx: str, use_proxy: bool, rotate_proxy: bool):
         while True:
